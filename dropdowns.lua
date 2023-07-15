@@ -196,7 +196,10 @@ function DropdownClass:close()
 
 	self:close_dropdown_menu()
 
-	managers.gui_data:layout_fullscreen_workspace(managers.mouse_pointer._ws)
+	if managers.gui_data then
+		managers.gui_data:layout_fullscreen_workspace(managers.mouse_pointer._ws)
+	end
+
 	if self._controller then
 		managers.mouse_pointer:remove_mouse(self.menu_mouse_id)
 
@@ -220,7 +223,13 @@ function DropdownClass:destroy()
 	self:close()
 
 	self._panel:parent():clear()
-	managers.gui_data:destroy_workspace(self._ws)
+
+	if managers.gui_data then
+		managers.gui_data:destroy_workspace(self._ws)
+		return
+	end
+
+	self._ws:gui():destroy_workspace(self._ws)
 end
 
 function DropdownClass:close_dropdown_menu()

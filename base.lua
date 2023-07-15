@@ -2,7 +2,7 @@ local module = DMod:new("loadout_dropdowns", {
 	name = "Loadout dropdowns",
 	description = "Allows you to open a dropdown gui out of your kit selection menu nodes",
 	author = "_atom",
-	version = "1.1",
+	version = "1.2",
 	dependencies = { "[drop_in_menu]" },
 })
 
