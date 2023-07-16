@@ -704,10 +704,10 @@ if RequiredScript == "lib/states/ingamewaitingforplayers" then
 		end
 	end)
 
-	module:post_hook(IngameWaitingForPlayersState, "at_Exit", function()
+	module:post_hook(IngameWaitingForPlayersState, "at_exit", function()
 		if rawget(_G, "DropDown") then
-			DropdownClass:destroy()
-			_G.DropdownClass = nil
+			DropDown:destroy()
+			_G.DropDown = nil
 		end
 	end)
 end
