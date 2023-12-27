@@ -723,6 +723,9 @@ if RequiredScript == "lib/managers/menu/menunodekitgui" then
 		end
 
 		local item = row_item.item
+		if table.size(item._options) <= 1 then
+			return
+		end
 
 		item:set_parameter("item_confirm_callback", function()
 			local base = row_item.choice_panel
