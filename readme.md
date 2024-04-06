@@ -1,6 +1,5 @@
 # Requirements
 * [DAHM/DorHud](https://steamcommunity.com/groups/dahm4pd) 1.16.1.1 or above.
-* [_sdk](https://github.com/mbien1981/_sdk) (Optional)
 
 # Installation
 Drop the PDTH-Loadout-Dropdowns folder inside of your `mods/` directory
