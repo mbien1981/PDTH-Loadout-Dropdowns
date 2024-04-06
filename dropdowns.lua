@@ -534,15 +534,12 @@ function DropdownClass:on_button_click(item)
 	local func = tablex.get(raw_item, "callback") or raw_dropdown.callback
 	local args = tablex.get(raw_item, "args")
 	if type(func) == "string" then
-		D:log(1, "internal call attempt")
 		if type(self[func]) == "function" then
-			D:log(1, "internal call success")
 			self[func](self, args)
 		end
 	end
 
 	if type(func) == "function" then
-		D:log(1, "external call")
 		func(args)
 	end
 
