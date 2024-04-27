@@ -257,10 +257,6 @@ function DropdownClass:hide()
 
 	self:close_active_dropdown_menu()
 
-	if managers.gui_data then
-		managers.gui_data:layout_fullscreen_workspace(managers.mouse_pointer._ws)
-	end
-
 	if self._controller then
 		managers.mouse_pointer:remove_mouse(self.menu_mouse_id)
 
