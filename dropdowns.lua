@@ -583,7 +583,7 @@ function DropdownClass:mouse_press(_, button, x, y)
 	end
 end
 
-local module = ... or D:module("_hud")
+local module = ... or D:module("loadout_dropdowns")
 
 -- Hooks
 if RequiredScript == "lib/states/ingamewaitingforplayers" then
@@ -644,10 +644,6 @@ if RequiredScript == "lib/managers/menu/menunodekitgui" then
 		local item = row_item.item
 
 		item:set_parameter("item_confirm_callback", function()
-			if not D:conf("_hud_use_loadout_dropdowns") then
-				return false
-			end
-
 			local item_category = item:parameters().category
 
 			-- build up dropdown items
