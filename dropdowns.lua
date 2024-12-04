@@ -3,53 +3,33 @@ _M.DropdownClass = _M.DropdownClass or class()
 local DropdownClass = _M.DropdownClass
 
 -- object gui helpers
-function DropdownClass:rgb255(...)
-	local items = { ... }
-	local num = #items
-	if num == 4 then
-		return Color(items[1] / 255, items[2] / 255, items[3] / 255, items[4] / 255)
-	end
-
-	if num == 3 then
-		return Color(items[1] / 255, items[2] / 255, items[3] / 255)
-	end
-
-	return Color.white
-end
-
-function DropdownClass:make_box(panel, with_grow)
+function DropdownClass:make_box(panel)
 	local panel_w, panel_h = panel:size()
-	local grow = with_grow and "grow" or nil
-	local alpha = self._transparency and 0.4 or 1
+	local align = "grow"
 	panel:rect({
-		halign = grow,
-		valign = grow,
+		color = Color("0A0A0A"),
+		halign = align,
+		valign = align,
 		w = panel_w,
 		h = panel_h,
-		x = 0,
-		y = 0,
-		alpha = alpha,
-		color = self:rgb255(10, 10, 10),
 	})
 	panel:rect({
-		halign = grow,
-		valign = grow,
-		w = panel_w - 2,
-		h = panel_h - 2,
+		color = Color("3C3C3C"),
+		halign = align,
+		valign = align,
 		x = 1,
 		y = 1,
-		alpha = alpha,
-		color = self:rgb255(60, 60, 60),
+		w = panel_w - 2,
+		h = panel_h - 2,
 	})
 	panel:rect({
-		halign = grow,
-		valign = grow,
-		w = panel_w - 6,
-		h = panel_h - 6,
+		color = Color("0A0A0A"),
+		halign = align,
+		valign = align,
 		x = 3,
 		y = 3,
-		alpha = alpha,
-		color = self:rgb255(10, 10, 10),
+		w = panel_w - 6,
+		h = panel_h - 6,
 	})
 end
 
@@ -137,7 +117,7 @@ function DropdownClass:highlight_element(panel, size, style)
 		w = panel:w() - (size.w or 0),
 		h = panel:h() - (size.h or 0),
 		layer = size.layer or 100,
-		color = style.color or self.colors.secondary,
+		color = style.color,
 		alpha = 0,
 	})
 	rect_item:stop()
@@ -215,19 +195,16 @@ function DropdownClass:init()
 		sizes = { small = 18, medium = 24 },
 	}
 
-	self.visible = false
-	self.colors = { background = Color.black }
-	self.height_data = {
-		["button"] = 38,
-	}
+	self.active = false
+	self.height_data = { button = 38 }
 end
 
-function DropdownClass:is_visible()
-	return self.visible
+function DropdownClass:is_active()
+	return self.active
 end
 
 function DropdownClass:show()
-	if self:is_visible() then
+	if self:is_active() then
 		return
 	end
 
@@ -237,6 +214,7 @@ function DropdownClass:show()
 	end
 
 	if not self._controller then
+		self._ws:connect_keyboard(Input:keyboard())
 		self._controller = managers.controller:create_controller("dropdown_controller", nil, false)
 		self._controller:add_trigger("cancel", callback(self, self, "keyboard_cancel"))
 		managers.mouse_pointer:use_mouse({
@@ -247,17 +225,18 @@ function DropdownClass:show()
 	end
 	self._controller:enable()
 
-	self.visible = true
+	self.active = true
 end
 
 function DropdownClass:hide()
-	if not self:is_visible() then
+	if not self:is_active() then
 		return
 	end
 
 	self:close_active_dropdown_menu()
 
 	if self._controller then
+		self._ws:disconnect_keyboard()
 		managers.mouse_pointer:remove_mouse(self.menu_mouse_id)
 
 		self._controller:destroy()
@@ -269,7 +248,7 @@ function DropdownClass:hide()
 		menu.input._controller:enable()
 	end
 
-	self.visible = false
+	self.active = false
 end
 
 function DropdownClass:destroy()
@@ -323,7 +302,7 @@ function DropdownClass:open_dropdown_menu(panel, data)
 		layer = 1,
 		alpha = 0,
 	})
-	self:make_box(dropdown_panel, true)
+	self:make_box(dropdown_panel)
 
 	local offset = 0
 
@@ -386,6 +365,8 @@ function DropdownClass:open_dropdown_menu(panel, data)
 		o:set_alpha(1)
 	end)
 
+	dropdown_panel:key_press(callback(self, self, "key_press"))
+
 	self.active_dropdown = {
 		raw = data,
 		panel = dropdown_panel,
@@ -433,7 +414,6 @@ function DropdownClass:create_dropdown_button(data)
 		text = tostring(data.index),
 		font = self.font.path,
 		font_size = self.font.sizes.small,
-		color = self.colors.secondary,
 		alpha = 0.75,
 		layer = 2,
 	})
@@ -446,11 +426,33 @@ end
 
 -- Keyboard input
 function DropdownClass:keyboard_cancel()
-	if not self:is_visible() then
+	if not self:is_active() then
 		return
 	end
 
 	self:hide()
+end
+
+local btn_list = {}
+for i = 1, 9 do
+	btn_list[Idstring(tostring(i)):key()] = i
+	btn_list[Idstring("num " .. tostring(i)):key()] = i
+end
+
+function DropdownClass:key_press(_, key)
+	if managers.hud and managers.hud:showing_stats_screen() then
+		return
+	end
+
+	local active_dropdown = self.active_dropdown
+	if not active_dropdown then
+		return
+	end
+
+	local index = btn_list[key:key()]
+	if type(index) == "number" and active_dropdown.items[index] then
+		self:on_button_click(active_dropdown.items[index])
+	end
 end
 
 -- Mouse input
@@ -524,7 +526,11 @@ function DropdownClass:on_left_click()
 end
 
 function DropdownClass:on_button_click(item)
-	local raw_dropdown = self.active_dropdown.raw
+	local raw_dropdown = tablex.get(self, "active_dropdown", "raw")
+	if not raw_dropdown then
+		return
+	end
+
 	local raw_item = raw_dropdown.items[item.index]
 
 	local func = tablex.get(raw_item, "callback") or raw_dropdown.callback
@@ -576,6 +582,8 @@ function DropdownClass:mouse_press(_, button, x, y)
 		return
 	end
 end
+
+local module = ... or D:module("_hud")
 
 -- Hooks
 if RequiredScript == "lib/states/ingamewaitingforplayers" then
@@ -636,6 +644,10 @@ if RequiredScript == "lib/managers/menu/menunodekitgui" then
 		local item = row_item.item
 
 		item:set_parameter("item_confirm_callback", function()
+			if not D:conf("_hud_use_loadout_dropdowns") then
+				return false
+			end
+
 			local item_category = item:parameters().category
 
 			-- build up dropdown items
@@ -681,7 +693,7 @@ if RequiredScript == "lib/managers/menumanager" then
 	local KitMenuDropdown
 	module:hook(module:hook_class("MenuManager"), "toggle_menu_state", function(self)
 		KitMenuDropdown = KitMenuDropdown or rawget(_M, "KitMenuDropdown")
-		if KitMenuDropdown and KitMenuDropdown:is_visible() then -- prevent pausing when closing the active dropdown with escape
+		if KitMenuDropdown and KitMenuDropdown:is_active() then -- prevent pausing when closing the active dropdown with escape
 			return
 		end
 
