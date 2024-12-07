@@ -135,13 +135,13 @@ function DropdownClass:do_over_scroll(panel, amount, target)
 	panel:animate(function(o)
 		self:animate_ui(0.1, function(p)
 			o:set_y(math.lerp(o:y(), target + amount, p))
-			self:check_element_hover()
+			self:check_item_hover()
 		end)
 
 		panel:animate(function(o)
 			self:animate_ui(0.1, function(p)
 				o:set_y(math.lerp(o:y(), target, p))
-				self:check_element_hover()
+				self:check_item_hover()
 			end)
 		end)
 	end)
@@ -176,7 +176,7 @@ function DropdownClass:do_scroll(panel, target, amount)
 	panel:animate(function(o)
 		self:animate_ui(0.1, function(p)
 			o:set_y(math.lerp(o:y(), target, p))
-			self:check_element_hover()
+			self:check_item_hover()
 		end)
 	end)
 
@@ -190,17 +190,12 @@ function DropdownClass:init()
 
 	self.menu_mouse_id = managers.mouse_pointer:get_id()
 
-	self.font = {
-		path = "fonts/font_univers_530_bold",
-		sizes = { small = 18, medium = 24 },
-	}
-
-	self.active = false
+	self.font = { path = "fonts/font_univers_530_bold", sizes = { small = 18, medium = 24 } }
 	self.height_data = { button = 38 }
 end
 
 function DropdownClass:is_active()
-	return self.active
+	return self._active
 end
 
 function DropdownClass:show()
@@ -215,17 +210,19 @@ function DropdownClass:show()
 
 	if not self._controller then
 		self._ws:connect_keyboard(Input:keyboard())
+
 		self._controller = managers.controller:create_controller("dropdown_controller", nil, false)
 		self._controller:add_trigger("cancel", callback(self, self, "keyboard_cancel"))
+		self._controller:enable()
+
 		managers.mouse_pointer:use_mouse({
 			mouse_move = callback(self, self, "mouse_move"),
 			mouse_press = callback(self, self, "mouse_press"),
 			id = self.menu_mouse_id,
 		})
 	end
-	self._controller:enable()
 
-	self.active = true
+	self._active = true
 end
 
 function DropdownClass:hide()
@@ -233,7 +230,7 @@ function DropdownClass:hide()
 		return
 	end
 
-	self:close_active_dropdown_menu()
+	self:destroy_previous_dropdown_panel()
 
 	if self._controller then
 		self._ws:disconnect_keyboard()
@@ -243,33 +240,24 @@ function DropdownClass:hide()
 		self._controller = nil
 	end
 
-	managers.menu._input_enabled = true
-	for _, menu in ipairs(managers.menu._open_menus) do
-		menu.input._controller:enable()
-	end
+	setup:add_end_frame_clbk(function()
+		managers.menu._input_enabled = true
 
-	self.active = false
-end
+		for _, menu in ipairs(managers.menu._open_menus) do
+			menu.input._controller:enable()
+		end
+	end)
 
-function DropdownClass:destroy()
-	if not alive(self._panel) then
-		return
-	end
-
-	self:hide()
-
-	self._panel:parent():clear()
-
-	self._ws:gui():destroy_workspace(self._ws)
+	self._active = false
 end
 
 -- Menu definition
-function DropdownClass:close_active_dropdown_menu()
-	if not self.active_dropdown then
+function DropdownClass:destroy_previous_dropdown_panel()
+	if not self.dropdown then
 		return
 	end
 
-	local dropdown_panel = self.active_dropdown.panel
+	local dropdown_panel = self.dropdown.panel
 	dropdown_panel:stop()
 	dropdown_panel:animate(function(o)
 		self:animate_ui(0.5, function(p)
@@ -284,12 +272,11 @@ function DropdownClass:close_active_dropdown_menu()
 		self._panel:remove(dropdown_panel)
 	end)
 
-	self.active_dropdown = nil
+	self.dropdown = nil
 end
 
-function DropdownClass:open_dropdown_menu(panel, data)
-	self:show()
-	self:close_active_dropdown_menu()
+function DropdownClass:build_dropdown(panel, data)
+	self:destroy_previous_dropdown_panel()
 
 	local max_rows = 35
 	local target_h1 = 32 + max_rows * (self.height_data["button"] + 2)
@@ -304,11 +291,9 @@ function DropdownClass:open_dropdown_menu(panel, data)
 	})
 	self:make_box(dropdown_panel)
 
-	local offset = 0
-
 	if (dropdown_panel:y() + target_h1) > self._panel:h() then
 		for i = max_rows, 1, -1 do
-			local target_h2 = (i * (self.height_data["button"] + 2)) + offset
+			local target_h2 = (i * (self.height_data["button"] + 2))
 
 			if (dropdown_panel:y() + target_h2) <= self._panel:h() then
 				max_rows = i - 1
@@ -317,11 +302,10 @@ function DropdownClass:open_dropdown_menu(panel, data)
 		end
 	end
 
-	local target_h = (offset + 4)
-		+ (math.min(max_rows, table.size(data.items or {})) * (self.height_data["button"] + 2))
+	local target_h = (math.min(max_rows, table.size(data.items or {})) * (self.height_data["button"] + 2)) + 4
 	dropdown_panel:set_h(target_h)
 
-	local item_panel = dropdown_panel:panel({ y = offset + 4 })
+	local item_panel = dropdown_panel:panel({ y = 4 })
 
 	local scroll_panel = item_panel:panel({ halign = "grow", h = 2000 })
 	local column_panel = scroll_panel:panel({ alpha = 1, halign = "grow", x = 4, w = panel:w() - 8 })
@@ -336,14 +320,17 @@ function DropdownClass:open_dropdown_menu(panel, data)
 		button_panel:set_y(total_h + y_offset)
 		button_panel:set_h(add_amount)
 
-		local data = {
+		dropdown_items[index] = self:create_dropdown_button({
 			parent = button_panel,
 			height = add_amount,
 			item_data = item_data,
 			index = index,
-		}
+		})
 
-		dropdown_items[index] = callback(self, self, "create_dropdown_button", data)()
+		if index == data.selected then
+			self.current_hover = { panel = button_panel, index = index }
+			self:highlight_element(button_panel)
+		end
 
 		total_h = total_h + add_amount + y_offset
 	end
@@ -367,11 +354,12 @@ function DropdownClass:open_dropdown_menu(panel, data)
 
 	dropdown_panel:key_press(callback(self, self, "key_press"))
 
-	self.active_dropdown = {
+	self.dropdown = {
 		raw = data,
 		panel = dropdown_panel,
 		scroll_panel = scroll_panel,
 		items = dropdown_items,
+		selected = data.selected,
 		target_y = 0,
 	}
 end
@@ -433,25 +421,76 @@ function DropdownClass:keyboard_cancel()
 	self:hide()
 end
 
-local btn_list = {}
-for i = 1, 9 do
-	btn_list[Idstring(tostring(i)):key()] = i
-	btn_list[Idstring("num " .. tostring(i)):key()] = i
+function DropdownClass:set_selection_index(amount)
+	if not self.dropdown or not self.current_hover then
+		return
+	end
+
+	local item = self.dropdown.items[self.current_hover.index + amount]
+	if not item then
+		return
+	end
+
+	self.current_hover = { panel = item.panel, index = item.index }
+	self:highlight_element(item.panel)
 end
 
+local number_key_list = {}
+for i = 1, 9 do
+	number_key_list[Idstring(tostring(i))] = i
+	number_key_list[Idstring("num " .. tostring(i))] = i
+end
+
+local IDS_LEFT = Idstring("up")
+local IDS_UP = Idstring("left")
+local IDS_DOWN = Idstring("down")
+local IDS_RIGHT = Idstring("right")
+local IDS_ENTER = Idstring("enter")
+local IDS_NUM_ENTER = Idstring("num enter")
 function DropdownClass:key_press(_, key)
 	if managers.hud and managers.hud:showing_stats_screen() then
 		return
 	end
 
-	local active_dropdown = self.active_dropdown
+	local active_dropdown = self.dropdown
 	if not active_dropdown then
 		return
 	end
 
-	local index = btn_list[key:key()]
-	if type(index) == "number" and active_dropdown.items[index] then
-		self:on_button_click(active_dropdown.items[index])
+	if type(number_key_list[key]) == "number" and active_dropdown.items[number_key_list[key]] then
+		self:activate_item(active_dropdown.items[number_key_list[key]])
+		return
+	end
+
+	local selected = self.current_hover
+	if not selected then
+		return
+	end
+
+	if key == IDS_UP or key == IDS_LEFT then
+		self:set_selection_index(-1)
+		return
+	end
+
+	if key == IDS_DOWN or key == IDS_RIGHT then
+		self:set_selection_index(1)
+		return
+	end
+
+	--[[
+	if key == IDS_LEFT then
+		self:hide()
+		return
+	end
+
+	if key == IDS_RIGHT then
+		self:activate_item(active_dropdown.items[selected.index])
+		return
+	end
+	--]]
+
+	if key == IDS_ENTER or key == IDS_NUM_ENTER then
+		self:activate_item(active_dropdown.items[selected.index])
 	end
 end
 
@@ -464,26 +503,17 @@ function DropdownClass:is_mouse_in_panel(panel)
 	return panel:inside(self.menu_mouse_x, self.menu_mouse_y)
 end
 
-function DropdownClass:check_element_hover()
-	local active_dropdown = self.active_dropdown
+function DropdownClass:check_item_hover()
+	local active_dropdown = self.dropdown
 	if not active_dropdown then
 		return
 	end
 
 	if not self:is_mouse_in_panel(active_dropdown.panel) then
-		if self.current_hover then
-			self:unhighlight_element()
-			self.current_hover = nil
-			return
-		end
 		return
 	end
 
-	if self.current_hover then
-		if not self:is_mouse_in_panel(self.current_hover.panel) then
-			self:unhighlight_element()
-			self.current_hover = nil
-		end
+	if self.current_hover and self:is_mouse_in_panel(self.current_hover.panel) then
 		return
 	end
 
@@ -493,7 +523,7 @@ function DropdownClass:check_element_hover()
 
 	for _, item in pairs(active_dropdown.items) do
 		if self:is_mouse_in_panel(item.panel) then
-			self.current_hover = { panel = item.panel }
+			self.current_hover = { panel = item.panel, index = item.index }
 			self:highlight_element(item.panel)
 			break
 		end
@@ -502,16 +532,15 @@ end
 
 function DropdownClass:mouse_move(_, x, y)
 	self.menu_mouse_x, self.menu_mouse_y = x, y
-
-	if not self.active_dropdown then --?
+	if not self.dropdown then
 		return
 	end
 
-	self:check_element_hover()
+	self:check_item_hover()
 end
 
 function DropdownClass:on_left_click()
-	local dropdown = self.active_dropdown
+	local dropdown = self.dropdown
 	if not self:is_mouse_in_panel(dropdown.panel) then
 		self:hide()
 		return
@@ -519,14 +548,14 @@ function DropdownClass:on_left_click()
 
 	for _, item in pairs(dropdown.items) do
 		if self:is_mouse_in_panel(item.panel) then
-			self:on_button_click(item)
+			self:activate_item(item)
 			break
 		end
 	end
 end
 
-function DropdownClass:on_button_click(item)
-	local raw_dropdown = tablex.get(self, "active_dropdown", "raw")
+function DropdownClass:activate_item(item)
+	local raw_dropdown = tablex.get(self, "dropdown", "raw")
 	if not raw_dropdown then
 		return
 	end
@@ -554,7 +583,7 @@ local ids_wheel_down = Idstring("mouse wheel down")
 function DropdownClass:mouse_press(_, button, x, y)
 	self.menu_mouse_x, self.menu_mouse_y = x, y
 
-	local dropdown = self.active_dropdown
+	local dropdown = self.dropdown
 	if not dropdown then
 		return
 	end
@@ -581,6 +610,16 @@ function DropdownClass:mouse_press(_, button, x, y)
 
 		return
 	end
+end
+
+function DropdownClass:destroy()
+	if not alive(self._panel) then
+		return
+	end
+
+	self:hide()
+	self._panel:parent():clear()
+	self._ws:gui():destroy_workspace(self._ws)
 end
 
 local module = ... or D:module("loadout_dropdowns")
@@ -658,27 +697,27 @@ if RequiredScript == "lib/managers/menu/menunodekitgui" then
 				})
 			end
 
+			KitMenuDropdown:show()
 			local base = row_item.choice_panel
 			local panel_x = row_item.arrow_left:world_x()
 			local padding = 10 * tweak_data.scale.align_line_padding_multiplier
-			KitMenuDropdown:open_dropdown_menu(
-				KitMenuDropdown._panel:panel({
-					y = base:world_y(),
-					x = panel_x - padding,
-					w = base:world_right() - panel_x + padding,
-					h = base:h(),
-					layer = 10000,
-				}),
-				{
-					items = item_list,
-					callback = function(index)
-						-- MenuItemKitSlot does not have a :trigger() method, we have to reduce wanted index by 1 and call :next()
-						item._current_index = index - 1
-						item:next()
-						self:_reload_kitslot_item(item)
-					end,
-				}
-			)
+			local panel = KitMenuDropdown._panel:panel({
+				y = base:world_y(),
+				x = panel_x - padding,
+				w = base:world_right() - panel_x + padding,
+				h = base:h(),
+				layer = 10000,
+			})
+			KitMenuDropdown:build_dropdown(panel, {
+				items = item_list,
+				selected = item._current_index,
+				callback = function(index)
+					-- MenuItemKitSlot does not have a :trigger() method, we have to reduce wanted index by 1 and call :next()
+					item._current_index = index - 1
+					item:next()
+					self:_reload_kitslot_item(item)
+				end,
+			})
 
 			return true
 		end)
@@ -687,7 +726,9 @@ end
 
 if RequiredScript == "lib/managers/menumanager" then
 	local KitMenuDropdown
-	module:hook(module:hook_class("MenuManager"), "toggle_menu_state", function(self)
+
+	local MenuManager = module:hook_class("MenuManager")
+	module:hook(MenuManager, "toggle_menu_state", function(self)
 		KitMenuDropdown = KitMenuDropdown or rawget(_M, "KitMenuDropdown")
 		if KitMenuDropdown and KitMenuDropdown:is_active() then -- prevent pausing when closing the active dropdown with escape
 			return
